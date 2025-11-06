@@ -33,6 +33,7 @@
 ### 1. 环境安装
 
 # 安装依赖
+```bash
 pip install -r requirements.txt
 ```
 
@@ -76,12 +77,14 @@ python src/visualize_results.py
 
 **IWSLT17 中英翻译数据集**
 
+https://huggingface.co/datasets/IWSLT/iwslt2017
+
 | 分割 | 句对数 | 描述 |
 |------|--------|------|
 | 训练集 | 231,240 | train.tags.zh-en.* |
 | 验证集 | 877 | dev2010 |
 | 测试集 | 4,674 | tst2010-2012 |
-https://huggingface.co/datasets/IWSLT/iwslt2017
+
 
 ## 项目结构
 
