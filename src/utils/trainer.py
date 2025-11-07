@@ -478,3 +478,4 @@ class Trainer:
         self.steps = checkpoint.get('steps', 0)
         
         return checkpoint.get('epoch', 0)
+

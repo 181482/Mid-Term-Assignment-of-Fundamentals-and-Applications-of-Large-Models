@@ -55,3 +55,4 @@ class TransformerConfig:
         
         print(f"使用设备: {self.device}")
         print(f"模型配置: d_model={self.d_model}, heads={self.num_heads}, layers={self.num_layers}")
+

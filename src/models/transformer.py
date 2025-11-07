@@ -74,3 +74,4 @@ class Transformer(nn.Module):
         
         output = self.final_layer(dec_output)
         return output
+

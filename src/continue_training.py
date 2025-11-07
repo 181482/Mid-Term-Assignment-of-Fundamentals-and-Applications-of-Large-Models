@@ -68,6 +68,7 @@ def main():
     logging.info("继续训练模式")
     logging.info(f"目标总epoch数: {config.epochs}")
     logging.info(f"早停已禁用")
+    logging.info(f"BLEU计算已禁用(加快训练)")
     logging.info("="*60)
     
     try:
@@ -151,7 +152,52 @@ def main():
         # 初始化训练器
         trainer = Trainer(model, train_loader, val_loader, config)
         
-        # 加载checkpoint
+        # 临时修改trainer的validate方法,跳过BLEU计算
+        original_validate = trainer.validate
+        
+        def fast_validate():
+            """快速验证,不计算BLEU"""
+            trainer.model.eval()
+            total_loss = 0.0
+            num_batches = 0
+            
+            total_val_batches = len(trainer.val_loader)
+            log_interval = max(1, total_val_batches // 10)
+            
+            with torch.no_grad():
+                for i, batch in enumerate(trainer.val_loader):
+                    src, tgt = batch
+                    src = src.to(trainer.device)
+                    tgt = tgt.to(trainer.device)
+                    
+                    output = trainer.model(src, tgt[:, :-1])
+                    loss = trainer.criterion(
+                        output.reshape(-1, output.size(-1)),
+                        tgt[:, 1:].reshape(-1)
+                    )
+                    
+                    total_loss += loss.item()
+                    num_batches += 1
+                    
+                    if (i + 1) % log_interval == 0 or (i + 1) == total_val_batches:
+                        progress = (i + 1) / total_val_batches * 100
+                        print(f'\rValidating: {progress:.0f}% [{i+1}/{total_val_batches}]', 
+                              end='', flush=True)
+            
+            print()
+            
+            avg_loss = total_loss / num_batches
+            avg_ppl = trainer.calculate_perplexity(avg_loss)
+            
+            return {
+                'val_loss': avg_loss,
+                'ppl': avg_ppl,
+                'bleu': 0.0  # 不计算BLEU
+            }
+        
+        # 替换validate方法
+        trainer.validate = fast_validate
+        
         logging.info("加载checkpoint...")
         loaded_epoch = trainer.load_checkpoint(os.path.basename(checkpoint_path))
         
@@ -215,7 +261,7 @@ def main():
             print(f"  Train Loss: {train_loss:.4f}")
             print(f"  Val Loss: {val_metrics['val_loss']:.4f}")
             print(f"  Val PPL: {val_metrics['ppl']:.2f}")
-            print(f"  Val BLEU: {val_metrics['bleu']:.2f}")
+            # print(f"  Val BLEU: {val_metrics['bleu']:.2f}")  # 注释掉BLEU显示
         
         logging.info("="*60)
         logging.info("保存最终结果...")

@@ -35,7 +35,7 @@ def run_experiment(config, experiment_name, **kwargs):
         )
         data.setup()
         
-        # 获取数据加载器 - 现在返回3个值
+        # 获取数据加载器
         train_loader, val_loader, test_loader = data.get_dataloaders()
         
         # 初始化模型
@@ -48,11 +48,56 @@ def run_experiment(config, experiment_name, **kwargs):
             d_ff=config.d_ff,
             dropout=config.dropout,
             max_seq_length=config.max_seq_length,
-            use_positional_encoding=use_pe  # 传递位置编码参数
+            use_positional_encoding=use_pe
         ).to(config.device)
         
         # 训练模型
         trainer = Trainer(model, train_loader, val_loader, config)
+        
+        # 替换validate方法,跳过BLEU计算以加快消融实验
+        def fast_validate():
+            """快速验证,不计算BLEU"""
+            trainer.model.eval()
+            total_loss = 0.0
+            num_batches = 0
+            
+            total_val_batches = len(trainer.val_loader)
+            log_interval = max(1, total_val_batches // 10)
+            
+            with torch.no_grad():
+                for i, batch in enumerate(trainer.val_loader):
+                    src, tgt = batch
+                    src = src.to(trainer.device)
+                    tgt = tgt.to(trainer.device)
+                    
+                    output = trainer.model(src, tgt[:, :-1])
+                    loss = trainer.criterion(
+                        output.reshape(-1, output.size(-1)),
+                        tgt[:, 1:].reshape(-1)
+                    )
+                    
+                    total_loss += loss.item()
+                    num_batches += 1
+                    
+                    if (i + 1) % log_interval == 0 or (i + 1) == total_val_batches:
+                        progress = (i + 1) / total_val_batches * 100
+                        print(f'\rValidating: {progress:.0f}% [{i+1}/{total_val_batches}]', 
+                              end='', flush=True)
+            
+            print()
+            
+            avg_loss = total_loss / num_batches
+            avg_ppl = trainer.calculate_perplexity(avg_loss)
+            
+            return {
+                'val_loss': avg_loss,
+                'ppl': avg_ppl,
+                'bleu': 0.0  # 不计算BLEU
+            }
+        
+        # 替换validate方法
+        trainer.validate = fast_validate
+        
         trainer.train()
         
         best_loss = trainer.best_val_loss
@@ -73,15 +118,15 @@ def main():
     
     logging.info("开始消融实验...")
     
-    # Baseline实验
-    logging.info("\n" + "="*50)
-    logging.info("运行 Baseline 实验")
-    logging.info("="*50)
-    results.append({
-        'experiment': 'baseline',
-        'config': f'd_model={base_config.d_model}, heads={base_config.num_heads}, layers={base_config.num_layers}',
-        'val_loss': run_experiment(base_config.copy() if hasattr(base_config, 'copy') else TransformerConfig(), 'baseline')
-    })
+    # # Baseline实验
+    # logging.info("\n" + "="*50)
+    # logging.info("运行 Baseline 实验")
+    # logging.info("="*50)
+    # results.append({
+    #     'experiment': 'baseline',
+    #     'config': f'd_model={base_config.d_model}, heads={base_config.num_heads}, layers={base_config.num_layers}',
+    #     'val_loss': run_experiment(base_config.copy() if hasattr(base_config, 'copy') else TransformerConfig(), 'baseline')
+    # })
 
 
     # 位置编码消融实验
